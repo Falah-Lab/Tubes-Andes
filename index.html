@@ -385,6 +385,17 @@ async function fetchData() {
     const res = await fetch(url, { headers: HEADERS });
     const rows = await res.json();
     
+    // Cek status alarm dari Supabase agar sinkron antara HP & Laptop
+    const resAlarm = await fetch(`${SUPABASE_URL}/rest/v1/log_alarm?order=id.desc&limit=1`, { headers: HEADERS });
+    const rowsAlarm = await resAlarm.json();
+    if (rowsAlarm && rowsAlarm.length > 0) {
+      if (rowsAlarm[0].waktu_selesai !== null) {
+        alarmDiam = true;
+      } else {
+        alarmDiam = false;
+      }
+    }
+    
     if (rows && rows.length > 0) {
       const r = rows[0];
       const data = {
