@@ -398,23 +398,13 @@ async function fetchData() {
     
     if (rows && rows.length > 0) {
       const r = rows[0];
-      
-      // Deteksi jika Arduino mati/dicabut (data tidak update selama > 8 detik)
-      const lastUpdate = new Date(r.waktu.replace(' ', 'T'));
-      const now = new Date();
-      const diffSecs = (now - lastUpdate) / 1000;
-      
-      if (diffSecs > 8) {
-        updateUI({ status: 'TIDAK TERHUBUNG', persen: 0, jarak: 0, jam: r.waktu ? r.waktu.split(' ')[1] : jamLokal() });
-      } else {
-        const data = {
-          status: r.status,
-          persen: r.persen,
-          jarak: r.jarak_cm,
-          jam: r.waktu ? r.waktu.split(' ')[1] : jamLokal()
-        };
-        updateUI(data);
-      }
+      const data = {
+        status: r.status,
+        persen: r.persen,
+        jarak: r.jarak_cm,
+        jam: r.waktu ? r.waktu.split(' ')[1] : jamLokal()
+      };
+      updateUI(data);
     } else {
       updateUI({ status: 'KOSONG', persen: 0, jarak: 0, jam: '--:--:--' });
     }
