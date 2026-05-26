@@ -315,7 +315,14 @@ function updateUI(data) {
     pi.className  = 'piezo-icon';
     pt.className  = 'piezo-txt';
     pt.textContent = alarmDiam ? 'PIEZO : DIMATIKAN' : 'PIEZO : DIAM';
-    if (!alarmDiam) resetBtn();
+    
+    if (alarmDiam) {
+      btn.className   = 'btn-alarm';
+      btn.disabled    = true;
+      btn.textContent = 'ALARM SUDAH DIMATIKAN';
+    } else {
+      resetBtn();
+    }
   }
 
   // Log hanya jika status berubah dan bukan error
