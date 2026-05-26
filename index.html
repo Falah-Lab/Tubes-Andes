@@ -337,6 +337,15 @@ function resetBtn() {
   btn.textContent = 'MATIKAN ALARM';
 }
 
+// Konfigurasi Supabase
+const SUPABASE_URL = "https://cczjlxluqvwvvijvyawk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_2hda1xyT_AFdeKmkteNMVA_As_w4qY9";
+const HEADERS = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json"
+};
+
 async function matikanAlarm() {
   alarmDiam = true;
   const btn = document.getElementById('btn-alarm');
@@ -346,18 +355,24 @@ async function matikanAlarm() {
   document.getElementById('piezo-icon').className = 'piezo-icon';
   document.getElementById('piezo-txt').className  = 'piezo-txt';
   document.getElementById('piezo-txt').textContent = 'PIEZO : DIMATIKAN';
-  try { await fetch('/api/silent', { method: 'POST' }); } catch(e) {}
+  
+  try {
+    // Matikan alarm yang belum selesai di Supabase
+    const url = `${SUPABASE_URL}/rest/v1/log_alarm?waktu_selesai=is.null`;
+    const now = new Date();
+    const ts = now.toISOString().replace('T', ' ').substring(0, 19); // YYYY-MM-DD HH:MM:SS
+    const body = { waktu_selesai: ts, cara_selesai: 'MANUAL (WEB VERCEL)' };
+    await fetch(url, { method: 'PATCH', headers: HEADERS, body: JSON.stringify(body) });
+  } catch(e) {}
 }
 
 async function resetDatabase() {
   if(!confirm('Apakah Anda yakin ingin mereset semua data riwayat dari database kembali ke 0?')) return;
   try {
-    const res = await fetch('/api/reset', { method: 'POST' });
-    const data = await res.json();
-    if(data.ok) {
-      alert('Database berhasil direset ke 0!');
-      document.getElementById('log-box').innerHTML = '<div class="log-line"><span class="log-info">Database direset. Menunggu data...</span></div>';
-    }
+    await fetch(`${SUPABASE_URL}/rest/v1/log_level_air?id=gte.0`, { method: 'DELETE', headers: HEADERS });
+    await fetch(`${SUPABASE_URL}/rest/v1/log_alarm?id=gte.0`, { method: 'DELETE', headers: HEADERS });
+    alert('Database berhasil direset ke 0!');
+    document.getElementById('log-box').innerHTML = '<div class="log-line"><span class="log-info">Database direset. Menunggu data...</span></div>';
   } catch(e) {
     alert('Gagal mereset database!');
   }
@@ -365,12 +380,26 @@ async function resetDatabase() {
 
 async function fetchData() {
   try {
-    const res  = await fetch('/api/data');
-    const data = await res.json();
-    updateUI(data);
+    // Ambil 1 baris terakhir dari log_level_air
+    const url = `${SUPABASE_URL}/rest/v1/log_level_air?order=id.desc&limit=1`;
+    const res = await fetch(url, { headers: HEADERS });
+    const rows = await res.json();
+    
+    if (rows && rows.length > 0) {
+      const r = rows[0];
+      const data = {
+        status: r.status,
+        persen: r.persen,
+        jarak: r.jarak_cm,
+        jam: r.waktu ? r.waktu.split(' ')[1] : jamLokal()
+      };
+      updateUI(data);
+    } else {
+      updateUI({ status: 'KOSONG', persen: 0, jarak: 0, jam: '--:--:--' });
+    }
   } catch(e) {
     document.getElementById('conn-dot').className = 'dot err';
-    document.getElementById('conn-label').textContent = 'SERVER TIDAK AKTIF';
+    document.getElementById('conn-label').textContent = 'SERVER TIDAK TERHUBUNG';
     document.getElementById('conn-label').style.color = 'var(--red)';
   }
 }
