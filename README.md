@@ -1,66 +1,78 @@
 # 💧 AquaMonitor — Sistem Monitoring Tangki Air IoT
 
-AquaMonitor adalah sistem *Internet of Things* (IoT) komprehensif yang dirancang untuk memantau level ketinggian air di dalam tangki secara *real-time*. Sistem ini menggabungkan perangkat keras (Arduino) dengan arsitektur web modern untuk memberikan pengalaman pemantauan yang instan, responsif, dan dapat diakses dari mana saja.
+AquaMonitor adalah sistem *Internet of Things* (IoT) terintegrasi yang dirancang untuk memantau level ketinggian air di dalam tangki secara *real-time*. Sistem ini menggabungkan pembacaan sensor secara lokal dengan sinkronisasi ke *cloud database*, memungkinkan pemantauan dan pengendalian jarak jauh melalui perangkat apa pun.
 
 ![Screenshot Web](logo.png)
 
+---
+
 ## ✨ Fitur Utama
-- **Real-time Monitoring**: Memantau volume air (Persentase & Jarak cm) secara langsung tanpa *delay*.
-- **Cloud Database (Supabase)**: Data diunggah ke *cloud* secara efisien menggunakan REST API.
-- **Auto-Sync antar Perangkat**: Perubahan status di HP akan langsung mengubah tampilan di layar laptop Anda di detik yang sama.
-- **Smart Alarm System**: Piezo buzzer akan berbunyi saat air kosong. Alarm dapat dimatikan dari jarak jauh melalui antarmuka Web Vercel.
-- **Progressive Web App (PWA)**: Website dapat diinstal ke layar utama (*Home Screen*) *smartphone* Android & iOS sehingga terasa seperti aplikasi *native*.
-- **Deteksi Putus Sambungan**: Web akan otomatis berubah abu-abu dan memunculkan peringatan jika kabel Arduino dicabut atau server dimatikan.
-- **Sensor Jitter Filter**: Dilengkapi algoritma *Exponential Moving Average (EMA)* pada Arduino untuk menjamin angka indikator tidak melompat-lompat akibat riak air.
+1. **Real-time Monitoring & Cloud Sync**: Data ketinggian air diunggah secara *real-time* ke Supabase dan ditampilkan ke antarmuka web tanpa perlu *refresh*.
+2. **Progressive Web App (PWA)**: Website dilengkapi dengan `manifest.json`. Anda bisa menggunakan fitur **"Add to Home Screen"** di *smartphone* (iOS/Android) untuk menginstal web ini layaknya aplikasi *native* dengan logo khusus.
+3. **Smart Alarm & 2-Way Communication**: Piezo buzzer berbunyi saat air kosong. Alarm ini dapat dimatikan (*Mute*) dari jarak jauh melalui tombol di Website, yang akan mengirim perintah kembali ke laptop dan diteruskan ke Arduino.
+4. **Offline Detection**: Sistem cerdas yang mendeteksi jika kabel USB Arduino dicabut atau program Python dimatikan secara paksa (*Ctrl+C*), lalu memberikan peringatan **"TIDAK TERHUBUNG"** di web.
+5. **Sensor Jitter Filter**: Menggunakan algoritma *Exponential Moving Average (EMA)* pada Arduino untuk menyaring "noise" gelombang ultrasonik, menghasilkan angka yang sangat stabil.
+6. **Serial Buffer Drain**: Python secara proaktif menguras tumpukan data lama (*buffer lag*) dari Arduino untuk menjamin data yang dikirim ke *cloud* adalah data yang paling *real-time*.
 
 ---
 
-## 🛠️ Arsitektur & Teknologi
-Proyek ini dibangun menggunakan 3 pilar utama:
-1. **Perangkat Keras (Arduino Uno)**: Membaca sensor ultrasonik, menyalakan indikator LED, dan membunyikan alarm.
-2. **Server Lokal (Python)**: Bertindak sebagai "jembatan" penghubung. Secara pintar membaca data dari Arduino, membersihkan penumpukan data lama (*Buffer Drain*), mendeteksi pemutusan kabel, dan mengunggah semuanya ke *database cloud*.
-3. **Frontend Web (Vercel & Supabase)**: Antarmuka cantik bergaya *Glassmorphism* & *Cyberpunk* yang mengambil data secara *real-time* dari Supabase.
+## 🧠 Cara Kerja Sistem (Data Flow)
+
+Alur komunikasi data pada AquaMonitor dirancang secara satu arah (untuk data sensor) dan dua arah (untuk kontrol alarm), dengan urutan sebagai berikut:
+
+1. **Sensor & Arduino (Lapisan Perangkat Keras)**
+   Sensor ultrasonik HC-SR04 membaca jarak permukaan air. Arduino menyaring data tersebut dengan algoritma EMA untuk mencegah angka melompat. Arduino lalu mencetak string CSV sederhana (contoh: `SEDANG,72,5.20`) ke jalur komunikasi Serial USB setiap 1 detik.
+2. **Server Python (Lapisan Jembatan Lokal)**
+   Skrip `server.py` yang berjalan di laptop membaca data Serial dari Arduino. Untuk mencegah data basi (*buffer lag*), Python selalu menguras antrean *buffer* serial. Jika data berubah, Python langsung mengirim HTTP POST/PATCH Request ke Supabase *REST API*.
+3. **Supabase (Lapisan Cloud Database)**
+   Supabase menyimpan data dalam dua tabel utama: `log_level_air` (menyimpan riwayat tinggi air) dan `log_alarm` (menyimpan log kapan alarm menyala dan kapan dimatikan).
+4. **Vercel Web (Lapisan Antarmuka Pengguna)**
+   Halaman web statis yang di-*hosting* di Vercel melakukan *Fetch* (Tarik Data) ke Supabase setiap 1 detik. Jika pengguna menekan tombol "Matikan Alarm" di web, web akan meng-*update* baris di tabel `log_alarm`. Python yang terus memantau tabel ini akan menyadari perubahan tersebut dan mengirim teks `SILENT\n` ke Arduino melalui kabel USB.
 
 ---
 
-## 🔌 Skema Rangkaian (Wiring) Arduino
-| Komponen | Pin Arduino | Keterangan |
-| :--- | :---: | :--- |
-| **Sensor HC-SR04** | `5V`, `GND` | Power & Ground |
-| | `D9` | Pin Trigger |
-| | `D10` | Pin Echo |
-| **LED Merah** | `D5` | Menyala saat air **Kosong** (≤ 20%) |
-| **LED Kuning** | `D4` | Menyala saat air **Rendah** (21% - 50%) |
-| **LED Hijau** | `D3` | Menyala saat air **Normal/Penuh** (> 50%) |
-| **Piezo Buzzer** | `D8` | (+) ke D8, (-) ke GND |
+## ⚙️ Persiapan Database (Supabase)
 
-*(Catatan: Semua kaki panjang LED dihubungkan ke Pin Digital, dan kaki pendek ke GND menggunakan resistor 220Ω).*
+Proyek ini tidak menggunakan *backend database* lokal, melainkan **Supabase**. Berikut cara inisiasinya:
+1. Buat proyek baru di [Supabase](https://supabase.com/).
+2. Masuk ke menu **SQL Editor**.
+3. Buka file `setup_supabase.sql` dari repositori ini, salin seluruh kodenya, dan *paste* ke SQL Editor Supabase.
+4. Klik **Run**. Script ini akan otomatis:
+   - Membuat tabel `log_level_air` dan `log_alarm`.
+   - Menyalakan Row Level Security (RLS).
+   - Membuat *Policy* publik agar Python dan Web dapat menulis/membaca data secara anonim (bebas akses tanpa login untuk keperluan praktikum).
 
 ---
 
-## 🚀 Cara Menjalankan Sistem
+## 🚀 Panduan Deployment & Eksekusi
 
-### 1. Persiapan Perangkat Keras
-- Rangkai komponen sesuai tabel *wiring* di atas.
-- Buka `monitoring_tangki_air/monitoring_tangki_air.ino` menggunakan **Arduino IDE**.
-- Sambungkan Arduino ke laptop dan klik **Upload**.
+### 1. Eksekusi Perangkat Keras (Arduino)
+- Rangkai komponen HC-SR04, 3 buah LED (Merah, Kuning, Hijau), dan Piezo Buzzer sesuai nomor pin di skrip `monitoring_tangki_air.ino`.
+- Buka file `.ino` tersebut di **Arduino IDE**, lalu klik **Upload** ke papan Arduino Uno.
 
-### 2. Persiapan Server Lokal (Laptop)
-Pastikan Python sudah terinstal di laptop Anda. Buka Terminal/Command Prompt di dalam folder proyek ini dan jalankan perintah:
+### 2. Eksekusi Jembatan Lokal (Python)
+Buka Terminal/Command Prompt di dalam folder proyek ini dan *install* modul yang dibutuhkan:
 ```bash
 pip install pyserial requests
 ```
-Setelah modul terinstal, jalankan server:
+*(Opsional: Jika Anda mengubah database Supabase, pastikan Anda mengganti string `SUPABASE_URL` dan `SUPABASE_KEY` di dalam file `server.py` dan `database.py` dengan URL dan Anon Key dari proyek Supabase Anda yang baru).*
+
+Jalankan server penghubung:
 ```bash
 python server.py
-# atau
-py server.py
 ```
-*(Server akan otomatis mendeteksi Port USB Arduino Anda dan langsung mengirim data ke Supabase).*
+*(Biarkan jendela terminal ini tetap terbuka selama alat beroperasi).*
 
-### 3. Membuka Aplikasi
-- Buka tautan Vercel Anda di *browser* HP atau Laptop: `https://tubes-andes.vercel.app`
-- Jika ingin memasang aplikasinya di HP, buka web tersebut di Google Chrome (Android) atau Safari (iOS), lalu pilih **"Add to Home Screen"**.
+### 3. Deploy Web ke Vercel
+Karena proyek ini menggunakan antarmuka Vanilla HTML/JS murni, proses *deploy* ke Vercel sangatlah mudah:
+1. Dorong (*Push*) seluruh repositori ini ke akun GitHub Anda.
+2. Buka [Vercel](https://vercel.com/) dan buat *Project* baru.
+3. *Import* repositori GitHub ini.
+4. Kosongkan *Build Command* dan *Output Directory* (biarkan *default*).
+5. Klik **Deploy**.
+6. Dalam hitungan detik, web Anda akan mengudara.
+
+*(Catatan: Pengaturan **Environment Variables** di Vercel tidak diwajibkan dalam arsitektur saat ini, karena Kunci Anonim Supabase diletakkan langsung di dalam `index.html` dan `server.py`. Kunci Anonim Supabase memang dirancang untuk aman diekspos di frontend berkat sistem perlindungan RLS (Row Level Security) dari Supabase).*
 
 ---
 
