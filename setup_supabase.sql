@@ -17,3 +17,7 @@ CREATE TABLE IF NOT EXISTS log_alarm (
     waktu_selesai text,
     cara_selesai text
 );
+
+-- Matikan sistem keamanan RLS (Row-Level Security) agar laptop & Vercel bebas mengirim data
+ALTER TABLE log_level_air DISABLE ROW LEVEL SECURITY;
+ALTER TABLE log_alarm DISABLE ROW LEVEL SECURITY;

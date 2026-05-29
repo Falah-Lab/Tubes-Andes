@@ -18,7 +18,7 @@ AquaMonitor adalah sistem *Internet of Things* (IoT) komprehensif yang dirancang
 ## 🛠️ Arsitektur & Teknologi
 Proyek ini dibangun menggunakan 3 pilar utama:
 1. **Perangkat Keras (Arduino Uno)**: Membaca sensor ultrasonik, menyalakan indikator LED, dan membunyikan alarm.
-2. **Server Lokal (Python)**: Bertindak sebagai "jembatan" penghubung. Mengambil data dari Arduino via kabel Serial USB dan mengunggahnya ke *database cloud*.
+2. **Server Lokal (Python)**: Bertindak sebagai "jembatan" penghubung. Secara pintar membaca data dari Arduino, membersihkan penumpukan data lama (*Buffer Drain*), mendeteksi pemutusan kabel, dan mengunggah semuanya ke *database cloud*.
 3. **Frontend Web (Vercel & Supabase)**: Antarmuka cantik bergaya *Glassmorphism* & *Cyberpunk* yang mengambil data secara *real-time* dari Supabase.
 
 ---

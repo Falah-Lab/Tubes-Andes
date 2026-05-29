@@ -32,13 +32,15 @@
 
 // ── Konfigurasi Tangki ───────────────────────────────────────────
 #define JARAK_PENUH    2    // cm - jarak sensor ke air saat PENUH
-#define JARAK_KOSONG   16   // cm - jarak sensor ke dasar saat KOSONG (16.5cm)
+#define JARAK_KOSONG   16.5  // cm - jarak sensor ke dasar saat KOSONG 
 
 
 // ── Variabel Global ──────────────────────────────────────────────
 unsigned long waktuBacaTerakhir = 0;
 int           persenTerakhir    = -1;  // -1 = belum ada data valid
 bool          piezoSilent       = false; // true = alarm dimatikan manual
+float         jarakTerfilter    = -1.0;  // Untuk menghaluskan data sensor
+const float   FAKTOR_FILTER     = 0.2;   // 0.0 - 1.0 (Makin kecil makin stabil, tapi respon lebih lambat)
 
 
 // ================================================================
@@ -186,7 +188,6 @@ void loop() {
   cekPerintah();
 
   // 2. Jalankan piezo non-blocking HANYA jika data valid
-  //    persenTerakhir = -1 artinya belum ada data → skip piezo
   if (persenTerakhir >= 0) {
     aturPiezo(persenTerakhir);
   }
@@ -195,18 +196,22 @@ void loop() {
   if (millis() - waktuBacaTerakhir >= 1000) {
     waktuBacaTerakhir = millis();
 
-    float jarak = bacaJarak();
+    float jarakMurni = bacaJarak();
 
-    // Jika sensor error → kirim notif, JANGAN ubah persenTerakhir
-    // agar piezoSilent tidak ter-reset oleh nilai error
-    if (jarak < 0) {
+    if (jarakMurni < 0) {
       Serial.println("ERROR,-1,-1");
       return;
     }
 
-    // Data valid → update semua
-    persenTerakhir = hitungPersen(jarak);
+    // Filter Exponential Moving Average (EMA) untuk menstabilkan data
+    if (jarakTerfilter < 0) {
+      jarakTerfilter = jarakMurni; // Inisialisasi saat pertama kali baca
+    } else {
+      jarakTerfilter = (FAKTOR_FILTER * jarakMurni) + ((1.0 - FAKTOR_FILTER) * jarakTerfilter);
+    }
+
+    persenTerakhir = hitungPersen(jarakTerfilter);
     aturLED(persenTerakhir);
-    kirimSerial(persenTerakhir, jarak);
+    kirimSerial(persenTerakhir, jarakTerfilter);
   }
 }

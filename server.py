@@ -39,10 +39,9 @@ alarm_id     = None   # id alarm yang sedang berjalan
 def auto_detect_port():
     ports = serial.tools.list_ports.comports()
     for port, desc, hwid in sorted(ports):
-        if "CH340" in desc or "Arduino" in desc or "USB Serial" in desc:
+        # Beberapa chip Arduino menggunakan nama CP210x
+        if "CH340" in desc or "Arduino" in desc or "USB Serial" in desc or "CP210" in desc:
             return port
-    if ports:
-        return ports[0].device  # Return first available as fallback
     return None
 
 def baca_serial():
@@ -60,7 +59,14 @@ def baca_serial():
             persen_lama = -1
 
             while True:
-                line = ser_obj.readline().decode('utf-8').strip()
+                # 1. Kuras buffer agar tidak membaca data lama (menghindari delay bermenit-menit)
+                if ser_obj.in_waiting > 100:
+                    ser_obj.reset_input_buffer()
+
+                line = ser_obj.readline().decode('utf-8', errors='ignore').strip()
+                if not line:
+                    continue
+
                 if ',' not in line or line == "STATUS,PERSEN,JARAK_CM":
                     continue
 
@@ -90,19 +96,39 @@ def baca_serial():
                 # Logika alarm database
                 if status == "KOSONG" and alarm_id is None:
                     alarm_id = db.mulai_alarm()
+                    alarm_muted = False
+                    waktu_terakhir_cek = time.time()
                     print(f"[ALARM] Mulai — id: {alarm_id}")
 
                 elif status != "KOSONG" and alarm_id is not None:
                     db.selesai_alarm(alarm_id, "OTOMATIS")
                     print(f"[ALARM] Selesai otomatis — id: {alarm_id}")
                     alarm_id = None
+                    alarm_muted = False
+                
+                # Cek apakah alarm dimatikan dari Web Vercel
+                if alarm_id is not None and not locals().get('alarm_muted', False):
+                    if 'waktu_terakhir_cek' not in locals():
+                        waktu_terakhir_cek = time.time()
+                    if time.time() - waktu_terakhir_cek > 2:
+                        waktu_terakhir_cek = time.time()
+                        if db.cek_alarm_selesai(alarm_id):
+                            print(f"[ALARM] Dimatikan dari Vercel — id: {alarm_id}")
+                            try:
+                                ser_obj.write(b"SILENT\n")
+                            except:
+                                pass
+                            alarm_muted = True
 
                 status_lama = status
                 print(f"[DATA] {data_tangki}")
 
         except serial.SerialException as e:
             print(f"[ERROR] {e} — coba lagi dalam 3 detik...")
-            data_tangki["status"] = "TIDAK TERHUBUNG"
+            if data_tangki["status"] != "TIDAK TERHUBUNG":
+                data_tangki["status"] = "TIDAK TERHUBUNG"
+                db.simpan_data("TIDAK TERHUBUNG", 0, 0.0)
+                persen_lama = -1
             ser_obj = None
             time.sleep(3)
 
@@ -237,4 +263,6 @@ if __name__ == '__main__':
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[INFO] Server dihentikan.")
+        print("\n[INFO] Menyimpan status offline ke database...")
+        db.simpan_data("TIDAK TERHUBUNG", 0, 0.0)
+        print("[INFO] Server dihentikan.")
